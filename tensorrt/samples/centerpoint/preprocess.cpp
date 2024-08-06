@@ -19,9 +19,9 @@ void PreprocessWorker(float* points, float* feature, int* indices, int pointNum,
 
     for(int idx = 0; idx < pointNum; idx++){
         
-        auto x = points[idx*5];
-        auto y = points[idx*5+1];
-        auto z = points[idx*5+2];
+        auto x = points[idx*INPUT_POINT_STRIDE];
+        auto y = points[idx*INPUT_POINT_STRIDE+1];
+        auto z = points[idx*INPUT_POINT_STRIDE+2];
         if(x < X_MIN || x > X_MAX || y < Y_MIN || y > Y_MAX || 
            z < Z_MIN || z > Z_MAX)
            continue;
@@ -51,8 +51,15 @@ void PreprocessWorker(float* points, float* feature, int* indices, int pointNum,
         feature[                                     pillarCountIdx*MAX_PIONT_IN_PILLARS + pointNumInPillar] = x;
         feature[1*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarCountIdx*MAX_PIONT_IN_PILLARS + pointNumInPillar] = y;
         feature[2*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarCountIdx*MAX_PIONT_IN_PILLARS + pointNumInPillar] = z; // z
-        feature[3*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarCountIdx*MAX_PIONT_IN_PILLARS + pointNumInPillar] = points[idx*5+3]; // instence
-        feature[4*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarCountIdx*MAX_PIONT_IN_PILLARS + pointNumInPillar] = points[idx*5+4]; // time_lag
+        feature[3*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarCountIdx*MAX_PIONT_IN_PILLARS + pointNumInPillar] = points[idx*INPUT_POINT_STRIDE+3]; // instence
+        if(INPUT_POINT_STRIDE >= 5)
+        {
+            feature[4*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarCountIdx*MAX_PIONT_IN_PILLARS + pointNumInPillar] = points[idx*INPUT_POINT_STRIDE+4]; // time_lag
+        }
+        else
+        {
+            feature[4*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarCountIdx*MAX_PIONT_IN_PILLARS + pointNumInPillar] = 0.0f; // time_lag
+        }
 
         feature[8*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarCountIdx*MAX_PIONT_IN_PILLARS + pointNumInPillar] = x - (xIdx*X_STEP + X_MIN + X_STEP/2);
         feature[9*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarCountIdx*MAX_PIONT_IN_PILLARS + pointNumInPillar] = y - (yIdx*Y_STEP + Y_MIN + Y_STEP/2);
@@ -153,8 +160,50 @@ bool readBinFile(std::string& filename, void*& bufPtr, int& pointNum)
     if( fileSize /sizeof(float) % featureNum != 0){
          sample::gLogError << "[Error] File Size Error! " << fileSize << std::endl;
     }
+
+    for(uint32_t idx=0; idx<pointNum; idx++)
+    {
+        float* ptr_i = static_cast<float*>(bufPtr + idx*sizeof(float));
+        if(idx % 10000 == 0)
+        {
+            LOGPF("point[%d] (%.3f, %.3f, %.3f, %.3f, %.3f)", idx, ptr_i[0], ptr_i[1], ptr_i[2], ptr_i[3], ptr_i[4]);
+        }
+    }
+
     sample::gLogInfo << "[INFO] pointNum : " << pointNum << std::endl;
     return true;
 }
 
+bool PCDTxt2Arrary(std::string file_name, void*& bufPtr, int& pointNum, int num_feature)
+{
+  std::ifstream InFile;
+  InFile.open(file_name.data());
+  assert(InFile.is_open());
 
+  std::vector<float> temp_points;
+  std::string c;
+
+  uint32_t counter = 0;
+  while (!InFile.eof())
+  {
+      InFile >> c;
+      temp_points.push_back(atof(c.c_str()));
+      // LOGPF("c: %s, temp_points size: %ld", c.c_str(), temp_points.size());
+  }
+  LOGPF("temp_points size: %ld", temp_points.size());
+  float* points_array = new float[temp_points.size()];
+  for (int i = 0 ; i < temp_points.size() ; ++i) {
+    counter += 1;
+    if(counter % 5 == 0)
+    {
+      continue;
+    }
+    points_array[i] = temp_points[i];
+  }
+
+  InFile.close();  
+  pointNum = temp_points.size() / num_feature;
+  bufPtr = static_cast<void*>(points_array);
+  return true;
+  // printf("Done");
+};

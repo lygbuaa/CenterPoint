@@ -72,28 +72,28 @@ ScatterNDPlugin::ScatterNDPlugin(const std::string name, const void* data, size_
     assert(d == a + length);
 }
 
-int ScatterNDPlugin::getNbOutputs() const
+int ScatterNDPlugin::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims ScatterNDPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
+Dims ScatterNDPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) noexcept
 {   
     // scatterND data input 
     return Dims2(inputs[0].d[0],inputs[0].d[1]);
 }
 
-int ScatterNDPlugin::initialize()
+int ScatterNDPlugin::initialize() noexcept
 {
     return 0;
 }
 
-size_t ScatterNDPlugin::getWorkspaceSize(int) const
+size_t ScatterNDPlugin::getWorkspaceSize(int) const noexcept
 {
     return 0;
 }
 
-DataType ScatterNDPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
+DataType ScatterNDPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
 {
     return inputTypes[2];
 }
@@ -113,7 +113,7 @@ __global__ void _ScatterNDKernel(const Dtype *updata_input, const int *indicesIn
     }
 }
 
-int ScatterNDPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void*, cudaStream_t stream)
+int ScatterNDPlugin::enqueue(int batchSize, void const *const * inputs, void *const * outputs, void* workspace, cudaStream_t stream) noexcept
 {
     int channel_num = mOutputSize[1];
     int max_index_num = mInputIndexSize[0];
@@ -145,7 +145,7 @@ int ScatterNDPlugin::enqueue(int batchSize, const void* const* inputs, void** ou
     return 0;
 }
 
-void ScatterNDPlugin::serialize(void* buffer) const
+void ScatterNDPlugin::serialize(void* buffer) const noexcept
 {
     char* d = static_cast<char*>(buffer);
     char *a = d;
@@ -158,27 +158,27 @@ void ScatterNDPlugin::serialize(void* buffer) const
     assert(d == a + getSerializationSize());
 }
 
-void ScatterNDPlugin::terminate() {
+void ScatterNDPlugin::terminate() noexcept {
 }
 
-size_t ScatterNDPlugin::getSerializationSize() const
+size_t ScatterNDPlugin::getSerializationSize() const noexcept
 {
     return sizeof(DataType)+ 4*sizeof(size_t);
 }
 
-bool ScatterNDPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+bool ScatterNDPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const noexcept
 {
     return false;
 }
 
-bool ScatterNDPlugin::canBroadcastInputAcrossBatch(int inputIndex) const
+bool ScatterNDPlugin::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
 {
     return false;
 }
 
 void ScatterNDPlugin::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
     const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
+    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
 {
     mOutputSize[0] = outputDims[0].d[0];
     mOutputSize[1] = outputDims[0].d[1];
@@ -186,7 +186,7 @@ void ScatterNDPlugin::configurePlugin(const Dims* inputDims, int nbInputs, const
     mInputIndexSize[1] = inputDims[1].d[1];
 }
 
-bool ScatterNDPlugin::supportsFormat(DataType type, PluginFormat format) const
+bool ScatterNDPlugin::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
     switch (type)
     {   
@@ -200,7 +200,7 @@ bool ScatterNDPlugin::supportsFormat(DataType type, PluginFormat format) const
 /**
  * NO NEED TO MODIFY
  */
-const char* ScatterNDPlugin::getPluginType() const
+const char* ScatterNDPlugin::getPluginType() const noexcept
 {
     return SCATTERND_PLUGIN_NAME;
 }
@@ -208,19 +208,19 @@ const char* ScatterNDPlugin::getPluginType() const
 /**
  * NO NEED TO MODIFY
  */
-const char* ScatterNDPlugin::getPluginVersion() const
+const char* ScatterNDPlugin::getPluginVersion() const noexcept
 {
     return SCATTERND_PLUGIN_VERSION;
 }
 
-void ScatterNDPlugin::destroy()
+void ScatterNDPlugin::destroy() noexcept
 {
     delete this;
 }
 
-IPluginV2Ext* ScatterNDPlugin::clone() const
+IPluginV2Ext* ScatterNDPlugin::clone() const noexcept
 {
-    auto* plugin = new ScatterNDPlugin(mLayerName, mOutputSize, mInputIndexSize, mDataType);
+    ScatterNDPlugin* plugin = new ScatterNDPlugin(mLayerName, mOutputSize, mInputIndexSize, mDataType);
     plugin->setPluginNamespace(mNamespace.c_str());
     return plugin;
 }
@@ -228,7 +228,7 @@ IPluginV2Ext* ScatterNDPlugin::clone() const
 /**
  * NO NEED TO MODIFY
  */
-void ScatterNDPlugin::setPluginNamespace(const char* libNamespace)
+void ScatterNDPlugin::setPluginNamespace(const char* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
@@ -236,7 +236,7 @@ void ScatterNDPlugin::setPluginNamespace(const char* libNamespace)
 /**
  * NO NEED TO MODIFY
  */
-const char* ScatterNDPlugin::getPluginNamespace() const
+const char* ScatterNDPlugin::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
@@ -253,7 +253,7 @@ ScatterNDSamplePluginCreator::ScatterNDSamplePluginCreator()
 /**
  * NO NEED TO MODIFY
  */
-const char* ScatterNDSamplePluginCreator::getPluginName() const
+const char* ScatterNDSamplePluginCreator::getPluginName() const noexcept
 {
     return SCATTERND_PLUGIN_NAME;
 }
@@ -261,7 +261,7 @@ const char* ScatterNDSamplePluginCreator::getPluginName() const
 /**
  * NO NEED TO MODIFY
  */
-const char* ScatterNDSamplePluginCreator::getPluginVersion() const
+const char* ScatterNDSamplePluginCreator::getPluginVersion() const noexcept
 {
     return SCATTERND_PLUGIN_VERSION;
 }
@@ -269,12 +269,12 @@ const char* ScatterNDSamplePluginCreator::getPluginVersion() const
 /**
  * NO NEED TO MODIFY
  */
-const PluginFieldCollection* ScatterNDSamplePluginCreator::getFieldNames()
+const PluginFieldCollection* ScatterNDSamplePluginCreator::getFieldNames() noexcept
 {   
     return &mFC;
 }
 
-IPluginV2Ext* ScatterNDSamplePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2Ext* ScatterNDSamplePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
 {
     
     const nvinfer1::PluginField* fields = fc->fields;
@@ -299,12 +299,12 @@ IPluginV2Ext* ScatterNDSamplePluginCreator::createPlugin(const char* name, const
         }
     }
     
-    auto* plugin = new ScatterNDPlugin(name, outputShapeArray, indexShapeArray, mDataType);
+    ScatterNDPlugin* plugin = new ScatterNDPlugin(name, outputShapeArray, indexShapeArray, mDataType);
     plugin->setPluginNamespace(mNamespace.c_str());
     return plugin;
 }
 
-IPluginV2Ext* ScatterNDSamplePluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2Ext* ScatterNDSamplePluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength) noexcept
 {   
     return new ScatterNDPlugin(name, serialData, serialLength);
 }

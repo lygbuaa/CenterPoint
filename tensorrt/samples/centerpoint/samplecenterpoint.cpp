@@ -45,6 +45,7 @@
 #include "postprocess.h"
 
 const std::string gSampleName = "TensorRT.sample_onnx_centerpoint";
+const std::string gTrtEnginePath = "/usr/src/tensorrt/data/centerpoint/centerpoint_fp16.trt";
 
 int64_t getCurrentTime()
 {    
@@ -95,6 +96,9 @@ public:
     //! \brief Runs the TensorRT inference engine for this sample
     //!
     bool infer();
+
+    bool SaveTrtEngine(const std::string& file_path);
+    bool LoadTrtEngine(const std::string& file_path);
 
 private:
     samplesCommon::OnnxSampleParams mParams; //!< The parameters for the sample.
@@ -159,7 +163,6 @@ bool SampleCenterPoint::build()
     {
         return false;
     }
-
     
     auto constructed = constructNetwork(builder, network, config, parser);
     if (!constructed)
@@ -174,17 +177,13 @@ bool SampleCenterPoint::build()
         return false;
     }
 
-
+    SaveTrtEngine(gTrtEnginePath);
     sample::gLogInfo << "getNbInputs: " << network->getNbInputs() << " \n" << std::endl;
     sample::gLogInfo << "getNbOutputs: " << network->getNbOutputs() << " \n" << std::endl;
     sample::gLogInfo << "getNbOutputs Name: " << network->getOutput(0)->getName() << " \n" << std::endl;
 
     mInputDims = network->getInput(0)->getDimensions();
-    
     mOutputDims = network->getOutput(0)->getDimensions();
-
-  
-
     return true;
 }
 
@@ -207,16 +206,46 @@ bool SampleCenterPoint::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
         return false;
     }
 
-    config->setMaxWorkspaceSize(1_GiB);
+    config->setMaxWorkspaceSize(4_GiB);
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
-
     return true;
 }
+
+bool SampleCenterPoint::SaveTrtEngine(const std::string& file_path)
+{
+    sample::gLogInfo << "Saving engine : " << file_path << std::endl;
+    nvinfer1::IHostMemory *serializedModel = mEngine->serialize();
+    std::ofstream ofs(file_path, std::ios::out | std::ios::binary);
+    ofs.write((char*)(serializedModel ->data()), serializedModel ->size());
+    ofs.close();
+    return true;
+}
+
+bool SampleCenterPoint::LoadTrtEngine(const std::string& file_path)
+{
+    sample::gLogInfo << "Loading TensorRT engine from file " << file_path << std::endl;
+    std::ifstream planFile(file_path);
+    if (!planFile.is_open())
+    {
+        sample::gLogError << "Could not open trt file: " << file_path << std::endl;
+        return false;
+    }
+
+    std::stringstream planBuffer;
+    planBuffer << planFile.rdbuf();
+    std::string plan = planBuffer.str();
+    IRuntime *runtime = createInferRuntime(sample::gLogger);
+    ICudaEngine *engine = runtime->deserializeCudaEngine((void*)plan.data(), plan.size(), nullptr);
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(engine, samplesCommon::InferDeleter());
+    sample::gLogInfo << "trt engine size: " << plan.size() << std::endl;
+    return true;
+}
+
 bool SampleCenterPoint::testFun(const samplesCommon::BufferManager& buffers){
     
     size_t num = 38;
@@ -249,7 +278,8 @@ bool SampleCenterPoint::infer()
     
     void* inputPointBuf = nullptr;
 
-    std::vector<std::string> filePath = glob("../"+mParams.dataDirs[0]+"/points/*.bin");
+    // std::vector<std::string> filePath = glob("../"+mParams.dataDirs[0]+"/points/*.bin");
+    std::vector<std::string> filePath = glob("../"+mParams.dataDirs[0]+"/points/*.txt");
     
     for(auto idx = 0; idx < filePath.size(); idx++){
         std::cout << "filePath[idx]: " << filePath[idx] << std::endl;
@@ -258,7 +288,7 @@ bool SampleCenterPoint::infer()
         {
             return false;
         }
-        
+
         float* points = static_cast<float*>(inputPointBuf);
     
         std::vector<Box> predResult;
@@ -311,17 +341,22 @@ void SampleCenterPoint::saveOutput(std::vector<Box>& predResult, std::string& in
     std::string::size_type pos = inputFileName.find_last_of("/");
     std::string outputFilePath("../"+mParams.dataDirs[0]+"/results/"+ inputFileName.substr(pos) + ".txt");
 
-    ofstream resultFile;
+    std::ofstream resultFile;
 
     resultFile.exceptions ( std::ifstream::failbit | std::ifstream::badbit );
     try {
 
         resultFile.open(outputFilePath);
         for (size_t idx = 0; idx < predResult.size(); idx++){
-                resultFile << predResult[idx].x << " " << predResult[idx].y << " " << predResult[idx].z << " "<< \
-                predResult[idx].l << " " << predResult[idx].h << " " << predResult[idx].w << " " << predResult[idx].velX \
-                << " " << predResult[idx].velY << " " << predResult[idx].theta << " " << predResult[idx].score << \ 
-                " "<< predResult[idx].cls << std::endl;
+            // resultFile << predResult[idx].x << " " << predResult[idx].y << " " << predResult[idx].z << " "<< \
+            // predResult[idx].l << " " << predResult[idx].h << " " << predResult[idx].w << " " << predResult[idx].velX \
+            // << " " << predResult[idx].velY << " " << predResult[idx].theta << " " << predResult[idx].score << \ 
+            // " "<< predResult[idx].cls << std::endl;
+
+            /** use pointpillar box [ x, y, z, dx, dy, dz, yaw, score, cls] */
+            resultFile << predResult[idx].x << " " << predResult[idx].y << " " << predResult[idx].z << " "<< \
+            predResult[idx].l << " " << predResult[idx].h << " " << predResult[idx].w << \
+            " " << predResult[idx].theta << " " << predResult[idx].score << " "<< predResult[idx].cls << std::endl;
         }
         resultFile.close();
     }
@@ -336,13 +371,13 @@ void SampleCenterPoint::saveOutput(std::vector<Box>& predResult, std::string& in
 //!
 bool SampleCenterPoint::processInput(void*& inputPointBuf, std::string& pointFilePath, int& pointNum)
 {
-
-    bool ret = readBinFile(pointFilePath, inputPointBuf, pointNum);
+    // bool ret = readBinFile(pointFilePath, inputPointBuf, pointNum);
+    /** input txt file, instead of binary file */
+    bool ret = PCDTxt2Arrary(pointFilePath, inputPointBuf, pointNum);
     if(!ret){
         sample::gLogError << "Error read point file: " << pointFilePath<< std::endl;
         free(inputPointBuf);
         return ret;
-
     }
     return ret;
 }
@@ -368,6 +403,7 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
 
     params.dlaCore = args.useDLACore;
     params.fp16 = true;
+    // params.fp16 = false;
 
     return params;
 }
@@ -408,13 +444,19 @@ int main(int argc, char** argv)
     sample::gLogger.reportTestStart(sampleTest);
 
     SampleCenterPoint sample(initializeSampleParams(args));
-
     sample::gLogInfo << "Building and running a GPU inference engine for CenterPoint" << std::endl;
 
-    if (!sample.build())
+    bool build_trt = false;
+
+    if (build_trt && !sample.build())
     {
         return sample::gLogger.reportFail(sampleTest);
     }
+    else if(!build_trt && !sample.LoadTrtEngine(gTrtEnginePath))
+    {
+        return sample::gLogger.reportFail(sampleTest);
+    }
+
     if (!sample.infer())
     {
         return sample::gLogger.reportFail(sampleTest);
